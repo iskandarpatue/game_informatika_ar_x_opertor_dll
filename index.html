@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kuis Literasi Digital: Tangkap Jawabannya!</title>
+    <title>Game AR: Tangkap Jawabannya!</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
         body { font-family: 'Poppins', sans-serif; margin: 0; overflow: hidden; background-color: #000; }
         
-        /* Kamera Cermin */
+        /* Kamera Depan Cermin */
         #webcam-bg {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             object-fit: cover; z-index: 1; transform: scaleX(-1);
@@ -19,68 +19,80 @@
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 10; display: flex; flex-direction: column; justify-content: center; align-items: center;
-            pointer-events: none; /* Agar tidak memblokir klik ke elemen di bawahnya */
+            pointer-events: none;
         }
         .interactive { pointer-events: auto; }
         .hidden { display: none !important; }
 
-        /* Panel Glassmorphism Utama */
+        /* Panel Glassmorphism (Sangat Transparan agar kamera terlihat) */
         .glass-panel {
-            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
-            border: 2px solid #38bdf8; border-radius: 20px;
+            background: rgba(255, 255, 255, 0.35); /* Transparansi tinggi */
+            backdrop-filter: blur(4px); 
+            border: 2px solid rgba(56, 189, 248, 0.8); border-radius: 20px;
             width: 90%; max-width: 600px; padding: 30px; text-align: center;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            color: #0f172a;
         }
 
         /* Tampilan Soal di Atas */
         #soal-panel {
-            position: absolute; top: 5%; width: 90%; max-width: 800px;
-            background: rgba(255, 255, 255, 0.95); border-radius: 15px; padding: 15px 25px;
+            position: absolute; top: 3%; width: 95%; max-width: 900px;
+            background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(5px);
+            border-radius: 15px; padding: 15px 25px;
             border-bottom: 5px solid #0ea5e9; box-shadow: 0 10px 20px rgba(0,0,0,0.15);
             text-align: center;
         }
 
         .btn {
             background: #0ea5e9; color: white; padding: 15px 30px; border-radius: 12px;
-            font-size: 1.2rem; font-weight: bold; width: 100%; cursor: pointer; transition: 0.2s;
+            font-size: 1.1rem; font-weight: bold; width: 100%; cursor: pointer; transition: 0.2s;
+            border: 2px solid #0284c7; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
         }
         .btn:hover { background: #0284c7; }
         .btn:active { transform: scale(0.95); }
 
-        /* Wadah untuk Balok yang Jatuh */
+        /* Wadah untuk Balok Jatuh */
         #falling-container {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 5; pointer-events: none; overflow: hidden;
         }
 
-        /* Desain Kotak Jawaban yang Jatuh */
+        /* Desain 5 Kotak Jawaban (Lebih ramping agar muat 5) */
         .falling-box {
             position: absolute; pointer-events: auto; cursor: pointer;
-            background: linear-gradient(135deg, #38bdf8, #0284c7);
-            color: white; font-weight: 800; font-size: 1.1rem;
-            padding: 20px; border-radius: 15px; text-align: center;
-            width: 220px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-            border: 3px solid rgba(255,255,255,0.5);
+            background: linear-gradient(135deg, rgba(56,189,248,0.9), rgba(2,132,199,0.9));
+            color: white; font-weight: 700; font-size: 1rem;
+            padding: 15px 10px; border-radius: 15px; text-align: center;
+            width: 18%; max-width: 160px; box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            border: 2px solid rgba(255,255,255,0.8);
             animation: fallAnimation linear infinite;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s;
         }
         
-        .falling-box:active { transform: scale(0.9); }
+        /* State Kotak Tertangkap (Terkunci untuk soal multi-jawaban) */
+        .falling-box.selected {
+            background: linear-gradient(135deg, #f59e0b, #b45309) !important;
+            border: 3px solid #fef3c7; transform: scale(1.1);
+            box-shadow: 0 0 25px rgba(245, 158, 11, 0.8);
+            z-index: 20;
+        }
 
         @keyframes fallAnimation {
             0% { top: -150px; }
             100% { top: 110%; }
         }
 
-        /* Notifikasi Tengah Layar */
-        #feedback-msg {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            font-size: 4rem; font-weight: 900; padding: 20px 50px; border-radius: 20px;
-            text-transform: uppercase; letter-spacing: 2px;
+        /* Tombol Mengambang untuk Submit Jawaban Ganda */
+        #btn-submit-multiple {
+            position: absolute; bottom: 10%; z-index: 25; width: 60%; max-width: 400px;
+            background: #10b981; border-color: #047857; font-size: 1.3rem; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.5);
         }
     </style>
 </head>
 <body>
 
+    <!-- Kamera Depan -->
     <video id="webcam-bg" autoplay playsinline muted></video>
 
     <!-- Tempat kotak jawaban berjatuhan -->
@@ -89,74 +101,121 @@
     <div id="ui-layer">
         
         <!-- Layar Mulai -->
-        <div id="screen-start" class="glass-panel interactive">
-            <h1 class="text-3xl font-bold text-sky-600 mb-2">Game AR: Literasi Digital</h1>
-            <p class="text-gray-600 mb-6">Pilih jawaban yang benar dengan mengetuk kotak yang melayang jatuh.</p>
-            <input type="text" id="input-nama" class="w-full px-4 py-3 border-2 border-sky-200 rounded-xl mb-4 text-center text-lg focus:outline-none focus:border-sky-500" placeholder="Ketik Nama Siswa...">
-            <button class="btn" onclick="mulaiGame()">MULAI TANTANGAN</button>
+        <div id="screen-start" class="glass-panel interactive bg-white/70">
+            <h1 class="text-3xl font-extrabold text-sky-700 mb-2 drop-shadow-md">Kuis AR Interaktif</h1>
+            <p class="text-gray-800 font-bold mb-6">Tangkap balok jawaban yang benar di udara!</p>
+            <input type="text" id="input-nama" class="w-full px-4 py-3 border-2 border-sky-400 rounded-xl mb-4 text-center text-lg focus:outline-none bg-white/80" placeholder="Ketik Nama Siswa...">
+            <button class="btn" onclick="mulaiGame()">MULAI GAMEKUIS</button>
         </div>
 
         <!-- Panel Soal -->
         <div id="soal-panel" class="hidden interactive">
-            <div class="flex justify-between items-center mb-2 border-b-2 border-gray-100 pb-2">
-                <span id="quiz-progress" class="font-bold text-sky-600 bg-sky-100 px-3 py-1 rounded-full text-sm">Soal 1/5</span>
-                <span id="quiz-score" class="font-bold text-gray-700">Skor: 0</span>
+            <div class="flex justify-between items-center mb-2 border-b-2 border-sky-200 pb-2">
+                <span id="quiz-progress" class="font-bold text-sky-800 bg-sky-200/80 px-3 py-1 rounded-full text-sm">Soal 1/5</span>
+                <span id="quiz-instruksi" class="font-extrabold text-red-600 animate-pulse text-sm md:text-base">PILIH 1 JAWABAN</span>
+                <span id="quiz-score" class="font-bold text-gray-800 bg-white/60 px-3 py-1 rounded-full">Skor: 0</span>
             </div>
-            <h2 id="question-text" class="text-xl md:text-2xl font-bold text-gray-800">Teks soal akan muncul di sini...</h2>
+            <h2 id="question-text" class="text-lg md:text-2xl font-extrabold text-gray-900 drop-shadow-sm">Teks soal akan muncul di sini...</h2>
         </div>
 
-        <!-- Pesan Umpan Balik -->
-        <div id="feedback-msg" class="hidden interactive"></div>
+        <!-- Tombol Cek Jawaban (Khusus Soal Multi) -->
+        <button id="btn-submit-multiple" class="btn hidden interactive" onclick="submitMultiAnswer()">CEK JAWABAN</button>
 
-        <!-- Tombol Lanjut -->
-        <div id="btn-next-container" class="hidden interactive" style="position: absolute; bottom: 5%;">
-            <button class="btn" onclick="soalSelanjutnya()">LANJUT SOAL BERIKUTNYA</button>
+        <!-- Panel Feedback / Pembahasan -->
+        <div id="screen-feedback" class="glass-panel hidden interactive bg-white/90">
+            <h1 id="fb-title" class="text-4xl font-extrabold mb-2">BENAR!</h1>
+            <div class="bg-gray-100 p-4 rounded-xl mb-4 border border-gray-300 text-left">
+                <p class="text-sm font-bold text-gray-500 mb-1">Jawaban Benar:</p>
+                <p id="fb-correct-ans" class="font-bold text-sky-700 mb-3">[Jawaban]</p>
+                <p class="text-sm font-bold text-gray-500 mb-1">Penjelasan:</p>
+                <p id="fb-explanation" class="text-sm text-gray-800">[Penjelasan]</p>
+            </div>
+            <button class="btn" onclick="soalSelanjutnya()">LANJUT</button>
         </div>
 
         <!-- Layar Hasil -->
-        <div id="screen-result" class="glass-panel hidden interactive">
-            <h1 class="text-4xl font-bold text-sky-600 mb-2">Misi Selesai!</h1>
-            <p id="result-name" class="text-xl font-bold text-gray-700 mb-6">Hebat, [Nama]!</p>
+        <div id="screen-result" class="glass-panel hidden interactive bg-white/90">
+            <h1 class="text-4xl font-extrabold text-sky-700 mb-2">Hebat, <span id="result-name">Siswa</span>!</h1>
             
-            <div class="flex justify-around mb-6">
-                <div class="bg-green-100 p-4 rounded-xl w-5/12 border-2 border-green-300">
-                    <p class="text-green-700 font-bold">Benar</p>
+            <div class="flex justify-around mb-6 mt-4">
+                <div class="bg-green-100 p-4 rounded-xl w-5/12 border-2 border-green-400">
+                    <p class="text-green-800 font-bold">Benar</p>
                     <p id="result-benar" class="text-4xl font-extrabold text-green-600">0</p>
                 </div>
-                <div class="bg-red-100 p-4 rounded-xl w-5/12 border-2 border-red-300">
-                    <p class="text-red-700 font-bold">Salah</p>
+                <div class="bg-red-100 p-4 rounded-xl w-5/12 border-2 border-red-400">
+                    <p class="text-red-800 font-bold">Salah</p>
                     <p id="result-salah" class="text-4xl font-extrabold text-red-600">0</p>
                 </div>
             </div>
             
-            <div class="bg-sky-50 border-4 border-sky-400 p-4 rounded-2xl mb-6">
+            <div class="bg-sky-100 border-4 border-sky-400 p-4 rounded-2xl mb-6 shadow-inner">
                 <p class="text-sky-800 font-bold">NILAI AKHIR</p>
-                <p id="result-nilai" class="text-6xl font-extrabold text-sky-500">100</p>
+                <p id="result-nilai" class="text-6xl font-extrabold text-sky-600">100</p>
             </div>
             
-            <button class="btn" onclick="location.reload()">COBA LAGI</button>
+            <p id="result-motivasi" class="text-sm font-bold text-gray-600 mb-4 italic">Teruslah menjadi murid yang kritis dan kreatif!</p>
+            
+            <button class="btn mb-2" onclick="location.reload()">COBA LAGI</button>
         </div>
     </div>
 
     <script>
-        // Akses Webcam
-        navigator.mediaDevices.getUserMedia({ video: true })
+        // Akses Webcam Depan (Selfie/Mirror)
+        const constraints = { video: { facingMode: "user" } };
+        navigator.mediaDevices.getUserMedia(constraints)
             .then(stream => { document.getElementById('webcam-bg').srcObject = stream; })
             .catch(err => { console.warn("Kamera ditolak/tidak ada."); });
 
+        // Database Soal (5 Pilihan Jawaban)
         const questions = [
-            { question: "Operator untuk mengecualikan kata tertentu dari hasil pencarian adalah...", options: [{ text: "AND", correct: false }, { text: "OR", correct: false }, { text: "NOT / (-)", correct: true }, { text: "site:", correct: false }] },
-            { question: "Langkah pertama yang paling krusial dalam Membaca Lateral adalah...", options: [{ text: "Buka Tab Baru", correct: false }, { text: "Berhenti Sejenak", correct: true }, { text: "Cek Penulis", correct: false }, { text: "Simpulkan", correct: false }] },
-            { question: "Membatasi hasil pencarian hanya pada situs resmi pemerintah, gunakan operator...", options: [{ text: "AND", correct: false }, { text: "OR", correct: false }, { text: "site:go.id", correct: true }, { text: "filetype:", correct: false }] },
-            { question: "Tujuan utama Membaca Lateral adalah...", options: [{ text: "Membaca vertikal", correct: false }, { text: "Mencari typo", correct: false }, { text: "Bandingkan dgn sumber lain", correct: true }, { text: "Cari gambar", correct: false }] },
-            { question: "Manakah ciri domain situs yang paling kredibel?", options: [{ text: "Blog Pribadi", correct: false }, { text: ".go.id / .ac.id", correct: true }, { text: "Anonim", correct: false }, { text: "Sosial Media", correct: false }] }
+            { 
+                type: "single", 
+                question: "Operator mesin pencari yang digunakan untuk mengecualikan kata tertentu dari hasil pencarian adalah...", 
+                options: [
+                    { text: "AND", correct: false }, { text: "OR", correct: false }, 
+                    { text: "NOT / (-)", correct: true }, { text: "site:", correct: false }, 
+                    { text: "Tanda Kutip", correct: false }
+                ],
+                explanation: "Operator NOT atau tanda minus (-) mengecualikan kata agar pencarian lebih spesifik."
+            },
+            { 
+                type: "multiple", max: 3, 
+                question: "Manakah ciri-ciri domain situs informasi yang paling kredibel dan terpercaya? (PILIH MAKSIMAL 3)", 
+                options: [
+                    { text: "Domain .go.id", correct: true }, { text: "Blog Pribadi", correct: false }, 
+                    { text: "Domain .ac.id", correct: true }, { text: "Media Resmi", correct: true }, 
+                    { text: "Sosial Media Anonim", correct: false }
+                ],
+                explanation: "Situs pemerintah (.go.id), akademik (.ac.id), dan media resmi (terverifikasi) adalah sumber kredibel."
+            },
+            { 
+                type: "single", 
+                question: "Langkah PERTAMA yang paling krusial sebelum mempercayai atau membagikan informasi (Membaca Lateral) adalah...", 
+                options: [
+                    { text: "Buka Tab Baru", correct: false }, { text: "Berhenti Sejenak", correct: true }, 
+                    { text: "Cek Penulis", correct: false }, { text: "Telusuri Asal", correct: false }, 
+                    { text: "Langsung Simpulkan", correct: false }
+                ],
+                explanation: "Berhenti sejenak sangat penting untuk mencegah respons emosional dan penyebaran hoaks."
+            },
+            { 
+                type: "multiple", max: 2, 
+                question: "Tujuan utama seseorang melakukan teknik Membaca Lateral adalah... (PILIH MAKSIMAL 2)", 
+                options: [
+                    { text: "Membaca dengan sangat cepat", correct: false }, { text: "Mencari salah ketik", correct: false }, 
+                    { text: "Bandingkan dgn sumber lain", correct: true }, { text: "Mencegah sebaran Hoaks", correct: true }, 
+                    { text: "Mengunduh gambar", correct: false }
+                ],
+                explanation: "Membaca lateral bertujuan membandingkan informasi di sumber lain untuk verifikasi dan mencegah hoaks."
+            }
         ];
 
-        let currentQuestion = 0, score = 0, benar = 0, salah = 0, playerName = "", isAnswering = false;
-        let fallIntervals = [];
+        let currentQuestion = 0, score = 0, benar = 0, salah = 0, playerName = "";
+        let isAnswering = false;
+        let selectedBoxes = []; // Menyimpan kotak yang ditangkap (untuk soal multiple)
 
         function mulaiGame() {
-            playerName = document.getElementById('input-nama').value || "Siswa";
+            playerName = document.getElementById('input-nama').value || "Prajurit";
             document.getElementById('screen-start').classList.add('hidden');
             document.getElementById('soal-panel').classList.remove('hidden');
             tampilkanSoal();
@@ -164,19 +223,30 @@
 
         function tampilkanSoal() {
             isAnswering = true;
-            document.getElementById('btn-next-container').classList.add('hidden');
-            document.getElementById('feedback-msg').classList.add('hidden');
+            selectedBoxes = [];
+            document.getElementById('btn-submit-multiple').classList.add('hidden');
+            document.getElementById('screen-feedback').classList.add('hidden');
             
             const q = questions[currentQuestion];
             document.getElementById('question-text').innerText = q.question;
             document.getElementById('quiz-progress').innerText = `Soal ${currentQuestion + 1} / ${questions.length}`;
             document.getElementById('quiz-score').innerText = `Skor: ${Math.round(score)}`;
+            
+            // Instruksi Beda Untuk Single vs Multiple
+            const instruksi = document.getElementById('quiz-instruksi');
+            if (q.type === 'multiple') {
+                instruksi.innerText = `PILIH MAKSIMAL ${q.max} JAWABAN`;
+                instruksi.className = "font-extrabold text-orange-500 animate-pulse text-sm md:text-base";
+            } else {
+                instruksi.innerText = `TANGKAP 1 JAWABAN`;
+                instruksi.className = "font-extrabold text-red-600 animate-pulse text-sm md:text-base";
+            }
 
             const container = document.getElementById('falling-container');
             container.innerHTML = "";
             
-            // Pengaturan posisi horizontal (20%, 40%, 60%, 80% dari lebar layar)
-            const leftPositions = [10, 35, 60, 80];
+            // Posisi 5 Jalur (Kiri ke Kanan merata)
+            const leftPositions = [2, 22, 42, 62, 82]; 
             const shuffledOptions = q.options.sort(() => Math.random() - 0.5);
 
             shuffledOptions.forEach((opt, index) => {
@@ -184,47 +254,87 @@
                 box.className = "falling-box";
                 box.innerText = opt.text;
                 
-                // Set posisi X secara persentase agar responsif di layar lebar PID maupun laptop
-                box.style.left = `calc(${leftPositions[index]}% - 110px)`; 
-                
-                // Acak sedikit durasi jatuhnya agar tidak berbarengan (antara 6 sampai 9 detik)
-                const duration = Math.random() * 3 + 6;
-                box.style.animationDuration = `${duration}s`;
-                
-                // Tambahkan delay agar turunnya bergantian
-                box.style.animationDelay = `${index * 0.5}s`;
+                box.style.left = `${leftPositions[index]}%`; 
+                box.style.animationDuration = `${Math.random() * 3 + 7}s`; // Jatuh 7-10 detik
+                box.style.animationDelay = `${index * 0.7}s`; // Jeda jatuhnya
 
-                box.onclick = () => {
-                    if(!isAnswering) return;
-                    cekJawaban(opt.correct, box);
-                };
-
+                box.onclick = () => handleBoxClick(box, opt, q);
                 container.appendChild(box);
             });
         }
 
-        function cekJawaban(isCorrect, clickedBox) {
+        function handleBoxClick(box, opt, q) {
+            if(!isAnswering) return;
+
+            if (q.type === 'single') {
+                // Langsung Cek jika soal single
+                isAnswering = false;
+                evaluasiJawaban([opt.text], q);
+            } else {
+                // Logika Tangkap untuk soal Multi
+                if (box.classList.contains('selected')) {
+                    // Batal pilih
+                    box.classList.remove('selected');
+                    box.style.animationPlayState = 'running';
+                    selectedBoxes = selectedBoxes.filter(b => b.text !== opt.text);
+                } else {
+                    // Cek batas maksimal
+                    if (selectedBoxes.length >= q.max) {
+                        alert(`Maksimal memilih ${q.max} jawaban!`);
+                        return;
+                    }
+                    // Menangkap kotak di udara (Pause animasi)
+                    box.classList.add('selected');
+                    box.style.animationPlayState = 'paused';
+                    selectedBoxes.push({ box: box, text: opt.text });
+                }
+
+                // Tampilkan/Sembunyikan tombol Submit
+                if (selectedBoxes.length > 0) {
+                    document.getElementById('btn-submit-multiple').classList.remove('hidden');
+                } else {
+                    document.getElementById('btn-submit-multiple').classList.add('hidden');
+                }
+            }
+        }
+
+        function submitMultiAnswer() {
+            if (!isAnswering) return;
             isAnswering = false;
-            document.getElementById('falling-container').innerHTML = ""; // Hapus semua kotak
+            document.getElementById('btn-submit-multiple').classList.add('hidden');
+            const q = questions[currentQuestion];
+            const jawabanSiswa = selectedBoxes.map(s => s.text);
+            evaluasiJawaban(jawabanSiswa, q);
+        }
 
-            const feedback = document.getElementById('feedback-msg');
-            feedback.classList.remove('hidden');
+        function evaluasiJawaban(jawabanSiswa, q) {
+            document.getElementById('falling-container').innerHTML = ""; // Bersihkan layar
+            
+            const kunciJawaban = q.options.filter(o => o.correct).map(o => o.text);
+            
+            // Cek kebenaran (Siswa harus menebak semua jawaban benar yang diminta)
+            const isBenar = (jawabanSiswa.length === kunciJawaban.length) && 
+                            jawabanSiswa.every(j => kunciJawaban.includes(j));
 
-            if (isCorrect) {
+            const fbScreen = document.getElementById('screen-feedback');
+            const fbTitle = document.getElementById('fb-title');
+            
+            fbScreen.classList.remove('hidden');
+            document.getElementById('fb-correct-ans').innerText = kunciJawaban.join(" | ");
+            document.getElementById('fb-explanation').innerText = q.explanation;
+
+            if (isBenar) {
                 benar++;
                 score += (100 / questions.length);
-                feedback.innerText = "BENAR! 🎉";
-                feedback.style.color = "#10b981";
-                feedback.style.background = "rgba(255,255,255,0.9)";
+                fbTitle.innerText = "🎉 BENAR!";
+                fbTitle.className = "text-4xl font-extrabold mb-2 text-green-600";
             } else {
                 salah++;
-                feedback.innerText = "SALAH! ❌";
-                feedback.style.color = "#ef4444";
-                feedback.style.background = "rgba(255,255,255,0.9)";
+                fbTitle.innerText = "❌ KURANG TEPAT!";
+                fbTitle.className = "text-4xl font-extrabold mb-2 text-red-600";
             }
-
+            
             document.getElementById('quiz-score').innerText = `Skor: ${Math.round(score)}`;
-            document.getElementById('btn-next-container').classList.remove('hidden');
         }
 
         function soalSelanjutnya() {
@@ -238,16 +348,22 @@
 
         function tampilkanHasil() {
             document.getElementById('soal-panel').classList.add('hidden');
-            document.getElementById('btn-next-container').classList.add('hidden');
-            document.getElementById('feedback-msg').classList.add('hidden');
+            document.getElementById('screen-feedback').classList.add('hidden');
             
             const resultScreen = document.getElementById('screen-result');
             resultScreen.classList.remove('hidden');
 
-            document.getElementById('result-name').innerText = `Hebat, ${playerName}!`;
+            const finalScore = Math.round(score);
+            document.getElementById('result-name').innerText = playerName;
             document.getElementById('result-benar').innerText = benar;
             document.getElementById('result-salah').innerText = salah;
-            document.getElementById('result-nilai').innerText = Math.round(score);
+            document.getElementById('result-nilai').innerText = finalScore;
+            
+            let motivasi = "";
+            if (finalScore === 100) motivasi = "Sempurna! Kamu pantas dijuluki Master Literasi Digital.";
+            else if (finalScore >= 75) motivasi = "Kerja bagus! Pertahankan sikap kritismu di dunia maya.";
+            else motivasi = "Tetap semangat! Jangan ragu untuk mengulang dan belajar lagi.";
+            document.getElementById('result-motivasi').innerText = motivasi;
         }
     </script>
 </body>
