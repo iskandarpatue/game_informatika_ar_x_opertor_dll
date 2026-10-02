@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AR Game: Kuis Literasi Digital</title>
+    <!-- Library Web AR -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <!-- Library CSS (Tailwind) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+        body { font-family: 'Poppins', sans-serif; margin: 0; overflow: hidden; background-color: #000; }
+        
+        /* UI Layer selalu berada di atas feed kamera */
+        #ui-layer { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            z-index: 9999; pointer-events: none; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+        }
+        .interactive { pointer-events: auto; }
+        
+        /* Desain Panel Glassmorphism */
+        .glass-panel { 
+            background: rgba(255, 255, 255, 0.95); 
+            backdrop-filter: blur(8px); 
+            border: 2px solid #38bdf8;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+            border-radius: 20px; 
+            width: 90%; max-width: 500px; padding: 20px;
+        }
+        
+        /* State Utilities */
+        .hidden { display: none !important; }
+        
+        /* Tombol */
+        .btn {
+            background: #0ea5e9; color: white; padding: 12px 20px; border-radius: 10px;
+            font-weight: bold; width: 100%; border: none; cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn:hover { background: #0284c7; }
+        .btn-outline {
+            background: transparent; border: 2px solid #0ea5e9; color: #0ea5e9;
+        }
+        .btn-outline:hover { background: #e0f2fe; }
+        
+        /* Opsi Jawaban */
+        .opsi-label {
+            display: block; padding: 10px; border: 2px solid #e2e8f0; border-radius: 10px;
+            margin-bottom: 10px; cursor: pointer; transition: all 0.2s; background: white;
+        }
+        .opsi-label:hover { border-color: #38bdf8; background: #f0f9ff; }
+        input[type="radio"]:checked + .opsi-text, input[type="checkbox"]:checked + .opsi-text {
+            font-weight: bold; color: #0284c7;
+        }
+        
+        /* Notifikasi Peringatan AR */
+        #ar-warning {
+            background: rgba(220, 38, 38, 0.9); color: white; padding: 15px 25px;
+            border-radius: 30px; font-weight: bold; text-align: center;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body>
+
+    <!-- A-FRAME AR SCENE -->
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;" vr-mode-ui="enabled: false">
+        
+        <!-- Marker Hiro sebagai pemicu AR -->
+        <a-marker preset="hiro" id="marker-hiro">
+            <!-- Objek 3D yang muncul saat marker terdeteksi (Holo-Cube) -->
+            <a-box position="0 0.5 0" color="#38bdf8" material="opacity: 0.8; transparent: true" 
+                   animation="property: rotation; to: 360 360 0; loop: true; dur: 5000">
+            </a-box>
+            <a-text value="SOAL TERDETEKSI!" position="-1 1.5 0" color="#0ea5e9" scale="1.5 1.5 1.5"></a-text>
+        </a-marker>
+        
+        <a-entity camera></a-entity>
+    </a-scene>
+
+    <!-- OVERLAY UI GAME -->
+    <div id="ui-layer">
+        
+        <!-- HALAMAN 1: START -->
+        <div id="screen-start" class="glass-panel interactive">
+            <h1 class="text-2xl font-bold text-center text-sky-600 mb-1">Misi Pencarian Jejak AR</h1>
+            <h2 class="text-sm text-center text-gray-500 mb-6">Jadilah murid yang kritis dan kreatif</h2>
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2">Nama Prajurit (Siswa):</label>
+                <input type="text" id="input-nama" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-500" placeholder="Masukkan nama Anda...">
+            </div>
+            <button class="btn" onclick="startGame()">MULAI GAMEKUIS</button>
+        </div>
+
+        <!-- PERINGATAN SCAN MARKER (Muncul jika game mulai tapi marker tidak terlihat) -->
+        <div id="screen-warning" class="hidden interactive mt-4">
+            <div id="ar-warning">🔍 Arahkan kamera ke Marker "Hiro" untuk memunculkan soal!</div>
+        </div>
+
+        <!-- HALAMAN SOAL -->
+        <div id="screen-quiz" class="glass-panel hidden interactive">
+            <div class="flex justify-between items-center border-b pb-2 mb-4">
+                <span id="quiz-progress" class="text-sm font-bold text-sky-600 bg-sky-100 px-3 py-1 rounded-full">Soal 1 / 5</span>
+                <span id="quiz-score" class="text-sm font-bold text-gray-600">Skor: 0</span>
+            </div>
+            <h3 id="question-text" class="text-lg font-bold text-gray-800 mb-4">Pertanyaan di sini...</h3>
+            
+            <div id="options-container" class="mb-4">
+                <!-- Pilihan jawaban di-render pakai JS -->
+            </div>
+            
+            <!-- Area Feedback -->
+            <div id="feedback-area" class="hidden mb-4 p-3 rounded-lg text-sm font-bold"></div>
+            
+            <button id="btn-jawab" class="btn" onclick="checkAnswer()">JAWAB</button>
+            <button id="btn-lanjut" class="btn hidden" onclick="nextQuestion()">LANJUT</button>
+            <button id="btn-hasil" class="btn hidden" style="background: #10b981;" onclick="showResult()">LIHAT HASIL</button>
+        </div>
+
+        <!-- HALAMAN HASIL -->
+        <div id="screen-result" class="glass-panel hidden interactive text-center">
+            <h1 class="text-2xl font-bold text-sky-600 mb-2">Misi Selesai!</h1>
+            <p id="result-greeting" class="text-lg text-gray-700 font-bold mb-6">Hebat, [Nama]!</p>
+            
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-green-100 p-4 rounded-lg">
+                    <p class="text-sm text-green-700">Benar</p>
+                    <p id="result-benar" class="text-3xl font-bold text-green-600">0</p>
+                </div>
+                <div class="bg-red-100 p-4 rounded-lg">
+                    <p class="text-sm text-red-700">Salah</p>
+                    <p id="result-salah" class="text-3xl font-bold text-red-600">0</p>
+                </div>
+            </div>
+            
+            <div class="bg-sky-50 border-2 border-sky-200 p-4 rounded-lg mb-6">
+                <p class="text-sm text-sky-700 font-bold mb-1">NILAI AKHIR</p>
+                <p id="result-nilai" class="text-5xl font-extrabold text-sky-500">100</p>
+            </div>
+            
+            <p id="result-motivation" class="text-sm text-gray-600 italic mb-6">Pesan motivasi.</p>
+            
+            <div class="space-y-3">
+                <button class="btn" onclick="location.reload()">COBA LAGI</button>
+                <button class="btn btn-outline" onclick="location.reload()">KEMBALI KE AWAL</button>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- LOGIK JAVASCRIPT -->
+    <script>
+        // Database Soal
+        const questions = [
+            {
+                type: "single",
+                question: "Operator pencarian apa yang digunakan untuk mengecualikan kata tertentu dari hasil pencarian?",
+                options: [
+                    { id: "a", text: "AND", isCorrect: false },
+                    { id: "b", text: "OR", isCorrect: false },
+                    { id: "c", text: "NOT (atau tanda minus)", isCorrect: true },
+                    { id: "d", text: "site:", isCorrect: false },
+                    { id: "e", text: "Tanda kutip ganda", isCorrect: false }
+                ],
+                explanation: "Operator NOT atau tanda minus (-) digunakan untuk mengecualikan kata agar pencarian lebih spesifik."
+            },
+            {
+                type: "single",
+                question: "Langkah pertama yang paling krusial sebelum mempercayai atau membagikan sebuah informasi dalam teknik Membaca Lateral adalah...",
+                options: [
+                    { id: "a", text: "Membuka tab baru", isCorrect: false },
+                    { id: "b", text: "Berhenti sejenak", isCorrect: true },
+                    { id: "c", text: "Selidiki sumber", isCorrect: false },
+                    { id: "d", text: "Telusuri asal-usul", isCorrect: false },
+                    { id: "e", text: "Menyimpulkan langsung", isCorrect: false }
+                ],
+                explanation: "Berhenti sejenak sangat penting untuk mencegah penyebaran hoaks sebelum melakukan penelusuran lebih lanjut."
+            },
+            {
+                type: "single",
+                question: "Jika kamu ingin membatasi hasil pencarian hanya pada situs resmi pemerintah, operator apa yang tepat disisipkan?",
+                options: [
+                    { id: "a", text: "AND pemerintah", isCorrect: false },
+                    { id: "b", text: "OR go.id", isCorrect: false },
+                    { id: "c", text: "site:go.id", isCorrect: true },
+                    { id: "d", text: "NOT blog", isCorrect: false },
+                    { id: "e", text: "filetype:pdf", isCorrect: false }
+                ],
+                explanation: "Operator 'site:' membatasi mesin pencari agar hanya menampilkan hasil dari domain tertentu, misalnya situs go.id."
+            },
+            {
+                type: "single",
+                question: "Apa tujuan utama dari melakukan teknik membaca lateral (lateral reading)?",
+                options: [
+                    { id: "a", text: "Membaca artikel web dari atas ke bawah", isCorrect: false },
+                    { id: "b", text: "Membandingkan kebenaran informasi dari berbagai sumber lain", isCorrect: true },
+                    { id: "c", text: "Mencari kesalahan ketik pada suatu berita", isCorrect: false },
+                    { id: "d", text: "Mengunduh gambar dari artikel", isCorrect: false },
+                    { id: "e", text: "Membaca vertikal secara berulang", isCorrect: false }
+                ],
+                explanation: "Membaca lateral berarti membuka tab atau sumber lain di luar tautan asal untuk memverifikasi klaim/informasi."
+            },
+            {
+                type: "multiple",
+                question: "Manakah yang termasuk ciri-ciri sumber informasi terpercaya? (Pilih maksimal 3 jawaban)",
+                options: [
+                    { id: "a", text: "Kejelasan identitas penulis atau lembaga", isCorrect: true },
+                    { id: "b", text: "Menggunakan bahasa provokatif dan sensasional", isCorrect: false },
+                    { id: "c", text: "Domain kredibel seperti .go.id atau media resmi", isCorrect: true },
+                    { id: "d", text: "Informasi dibagikan secara anonim di media sosial", isCorrect: false },
+                    { id: "e", text: "Mencantumkan data, rujukan, atau narasumber yang jelas", isCorrect: true }
+                ],
+                explanation: "Sumber terpercaya memiliki identitas yang jelas, domain kredibel, menyertakan rujukan, dan tidak menggunakan bahasa yang provokatif/sensasional."
+            }
+        ];
+
+        // State Variabel
+        let currentQuestion = 0;
+        let score = 0;
+        let correctCount = 0;
+        let incorrectCount = 0;
+        let playerName = "";
+        let isGameStarted = false;
+        let isMarkerFound = false;
+
+        // Deteksi Marker AR
+        const marker = document.querySelector('#marker-hiro');
+        marker.addEventListener('markerFound', () => {
+            isMarkerFound = true;
+            updateUI();
+        });
+        marker.addEventListener('markerLost', () => {
+            isMarkerFound = false;
+            updateUI();
+        });
+
+        function updateUI() {
+            if (!isGameStarted) return;
+            
+            if (isMarkerFound) {
+                document.getElementById('screen-warning').classList.add('hidden');
+                document.getElementById('screen-quiz').classList.remove('hidden');
+            } else {
+                document.getElementById('screen-warning').classList.remove('hidden');
+                document.getElementById('screen-quiz').classList.add('hidden');
+            }
+        }
+
+        function startGame() {
+            const input = document.getElementById('input-nama').value;
+            if (input.trim() === "") {
+                alert("Harap masukkan nama Anda!");
+                return;
+            }
+            playerName = input;
+            isGameStarted = true;
+            document.getElementById('screen-start').classList.add('hidden');
+            
+            // Render soal pertama
+            renderQuestion();
+            updateUI();
+        }
+
+        function renderQuestion() {
+            const q = questions[currentQuestion];
+            document.getElementById('quiz-progress').innerText = `Soal ${currentQuestion + 1} / ${questions.length}`;
+            document.getElementById('quiz-score').innerText = `Skor: ${score}`;
+            document.getElementById('question-text').innerText = q.question;
+            
+            // Reset Area
+            document.getElementById('feedback-area').classList.add('hidden');
+            document.getElementById('btn-jawab').classList.remove('hidden');
+            document.getElementById('btn-lanjut').classList.add('hidden');
+            
+            const container = document.getElementById('options-container');
+            container.innerHTML = "";
+            
+            q.options.forEach(opt => {
+                const inputType = q.type === "single" ? "radio" : "checkbox";
+                const nameAttr = q.type === "single" ? "name='quiz-opsi'" : "";
+                
+                const label = document.createElement('label');
+                label.className = "opsi-label flex items-center";
+                label.innerHTML = `
+                    <input type="${inputType}" ${nameAttr} value="${opt.id}" class="mr-3 w-5 h-5 quiz-input cursor-pointer accent-sky-500">
+                    <span class="opsi-text text-gray-700">${opt.id.toUpperCase()}. ${textOption(opt.text)}</span>
+                `;
+                container.appendChild(label);
+            });
+        }
+
+        // Helper escape teks aman
+        function textOption(str) { return str.replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+        function checkAnswer() {
+            const q = questions[currentQuestion];
+            const inputs = document.querySelectorAll('.quiz-input:checked');
+            
+            if (inputs.length === 0) {
+                alert("Pilih jawaban terlebih dahulu!");
+                return;
+            }
+            
+            if (q.type === "multiple" && inputs.length > 3) {
+                alert("Maksimal pilih 3 jawaban!");
+                return;
+            }
+
+            // Kunci input agar tidak bisa diubah
+            document.querySelectorAll('.quiz-input').forEach(el => el.disabled = true);
+
+            let isUserCorrect = false;
+            
+            if (q.type === "single") {
+                const selectedId = inputs[0].value;
+                const correctOpt = q.options.find(o => o.isCorrect);
+                isUserCorrect = (selectedId === correctOpt.id);
+            } else {
+                // Logika Multiple
+                const selectedIds = Array.from(inputs).map(i => i.value);
+                const correctIds = q.options.filter(o => o.isCorrect).map(o => o.id);
+                // Cek jika array jawaban persis sama
+                const isMatch = selectedIds.length === correctIds.length && selectedIds.every(id => correctIds.includes(id));
+                isUserCorrect = isMatch;
+            }
+
+            const feedbackArea = document.getElementById('feedback-area');
+            feedbackArea.classList.remove('hidden');
+            
+            if (isUserCorrect) {
+                correctCount++;
+                score += (100 / questions.length);
+                feedbackArea.className = "mb-4 p-4 rounded-lg text-sm font-bold bg-green-100 text-green-800 border-l-4 border-green-500";
+                feedbackArea.innerHTML = `✅ BENAR!<br><span class="font-normal mt-1 block">${q.explanation}</span>`;
+            } else {
+                incorrectCount++;
+                feedbackArea.className = "mb-4 p-4 rounded-lg text-sm font-bold bg-red-100 text-red-800 border-l-4 border-red-500";
+                
+                // Construct string jawaban benar
+                const correctTexts = q.options.filter(o => o.isCorrect).map(o => o.id.toUpperCase() + ". " + o.text).join('<br>');
+                
+                feedbackArea.innerHTML = `❌ KURANG TEPAT!<br><span class="text-gray-700 font-normal mt-1 block">Jawaban yang benar adalah:<br><b>${correctTexts}</b><br><br>${q.explanation}</span>`;
+            }
+
+            document.getElementById('quiz-score').innerText = `Skor: ${Math.round(score)}`;
+            document.getElementById('btn-jawab').classList.add('hidden');
+            
+            if (currentQuestion < questions.length - 1) {
+                document.getElementById('btn-lanjut').classList.remove('hidden');
+            } else {
+                document.getElementById('btn-hasil').classList.remove('hidden');
+            }
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            renderQuestion();
+        }
+
+        function showResult() {
+            document.getElementById('screen-quiz').classList.add('hidden');
+            document.getElementById('screen-warning').classList.add('hidden');
+            document.getElementById('screen-result').classList.remove('hidden');
+            
+            // Menonaktifkan wajib marker di halaman hasil
+            isGameStarted = false; 
+            
+            document.getElementById('result-greeting').innerText = `Hebat, ${playerName}!`;
+            document.getElementById('result-benar').innerText = correctCount;
+            document.getElementById('result-salah').innerText = incorrectCount;
+            
+            const finalScore = Math.round(score);
+            document.getElementById('result-nilai').innerText = finalScore;
+            
+            let motivasi = "";
+            if (finalScore === 100) motivasi = "Sempurna! Kamu adalah master literasi digital!";
+            else if (finalScore >= 75) motivasi = "Kerja bagus! Pemahamanmu sudah sangat baik.";
+            else motivasi = "Tetap semangat! Jangan ragu untuk mempelajari kembali materinya.";
+            
+            document.getElementById('result-motivation').innerText = motivasi;
+        }
+    </script>
+</body>
+</html>
